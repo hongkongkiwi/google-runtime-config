@@ -8,17 +8,18 @@ const isUndefined = require('lodash.isundefined'),
       isNumber = require('lodash.isnumber'),
       assign  = require('lodash.assign'),
       map = require('lodash.map'),
-      has = require('lodash.has');
+      has = require('lodash.has')
 const {promisify} = require('util')
 const {google} = require('googleapis')
 const runtimeConfig = google.runtimeconfig('v1beta1')
 const readFileAsync = promisify(require('fs').readFile)
 const crypto = require('crypto')
-const Base64 = require('@ronomon/base64');
-const NodeCache = require( "node-cache" );
+const Base64 = require('@ronomon/base64')
+const NodeCache = require( "node-cache" )
+const Debug = require('debug')('GoogleRuntimeConfig')
 
-const MAXIMUM_VARIABLE_SIZE_BYTES = 4096;
-const ENCODING = 'utf8';
+const MAXIMUM_VARIABLE_SIZE_BYTES = 4096
+const ENCODING = 'utf8'
 
 // limiter.removeTokens(1, function() {
 //   callMyMessageSendingFunction(...)
@@ -44,8 +45,14 @@ const isBase64Encoded = (value) => {
   return matches !== null
 }
 
+const debugLog = (log) => {
+  Debug(log)
+}
+
 class CloudConfig {
+
   constructor(newOpts) {
+    //super()
     let opts = {
       credentials: {
         client_email: null,
@@ -59,22 +66,21 @@ class CloudConfig {
         useClones: true,
         deleteOnExpire: true
       },
+      Promise: Promise,
+      jwtClient: null,
       authScopes: ['https://www.googleapis.com/auth/cloudruntimeconfig'],
       projectId: process.env.GOOGLE_CLOUD_PROJECT,
       defaultConfig: null,
-      baseUrl: 'https://runtimeconfig.googleapis.com/v1beta1',
-      RateLimiter: null,
-      requestsToday: 0,
-      requestsLimitPerDay: 200
+      baseUrl: 'https://runtimeconfig.googleapis.com/v1beta1'
     }
     assign(this, opts, newOpts)
 
     if (!this.projectId) {
-      return new Error("No projectId passed")
+      throw new Error("No projectId passed")
     }
 
     if (!this.useCache) {
-      this.cache = new NodeCache(this.cacheSettings);
+      this.cache = new NodeCache(this.cacheSettings)
     }
 
     // var RateLimiter = require('limiter').RateLimiter
@@ -87,11 +93,13 @@ class CloudConfig {
   }
 
   async loadCredentials(credentialsFile) {
+    const Promise = this.Promise
     let credentials
     if (isString(credentialsFile)) {
       credentials = JSON.parse(await readFileAsync(credentialsFile, 'utf8'))
     }
     if (isEmpty(credentials) || !isObject(credentials)) {
+      debugLog('No credentials passed in loadCredentials method')
       return Promise.reject("No credentials passed")
     }
     this.credentials = credentials
@@ -101,7 +109,8 @@ class CloudConfig {
       this.credentials.private_key,
       this.authScopes
     )
-    return Promise.resolve()
+    debugLog(`Loaded credentials for ${this.credentials.client_email}`)
+    return Promise.resolve(this.credentials)
   }
 
   /** Variables **/
@@ -138,6 +147,7 @@ class CloudConfig {
   }
 
   async _setVariable(varName, varValue, isText, configName, update) {
+    const Promise = this.Promise
     return new Promise((resolve, reject) => {
       if (isEmpty(configName)) {
         configName = this.defaultConfig
@@ -216,6 +226,7 @@ class CloudConfig {
   }
 
   async getVariable(varName, configName) {
+    const Promise = this.Promise
     return new Promise((resolve, reject) => {
       if (isEmpty(configName)) {
         configName = this.defaultConfig
@@ -238,10 +249,11 @@ class CloudConfig {
           }
           resolve(response.data)
         })
-    });
+    })
   }
 
   async deleteVariable(varName, configName) {
+    const Promise = this.Promise
     return new Promise((resolve, reject) => {
       if (isEmpty(configName)) {
         configName = this.defaultConfig
@@ -261,10 +273,11 @@ class CloudConfig {
           if (err) return reject(err)
           resolve(response.data)
         })
-    });
+    })
   }
 
   async listVariables(configName, filter, pageSize, pageToken, returnValues) {
+    const Promise = this.Promise
     return new Promise((resolve, reject) => {
       if (isEmpty(configName)) {
         configName = this.defaultConfig
@@ -273,7 +286,7 @@ class CloudConfig {
         }
       }
 
-      if (!isNumber(pageSize)) pageSize = 1000;
+      if (!isNumber(pageSize)) pageSize = 1000
       if (!isBoolean(returnValues)) returnValues = true
 
       const params = {
@@ -297,6 +310,7 @@ class CloudConfig {
 
   /** Configs **/
   async createConfig(configName, configDescription) {
+    const Promise = this.Promise
     return new Promise((resolve, reject) => {
       if (isEmpty(configName)) {
         configName = this.defaultConfig
@@ -326,6 +340,7 @@ class CloudConfig {
   }
 
   async updateConfig(configName, configDescription) {
+    const Promise = this.Promise
     return new Promise((resolve, reject) => {
       if (isEmpty(configName)) {
         configName = this.defaultConfig
@@ -354,6 +369,7 @@ class CloudConfig {
   }
 
   async deleteConfig(configName) {
+    const Promise = this.Promise
     return new Promise((resolve, reject) => {
       if (isEmpty(configName)) {
         configName = this.defaultConfig
@@ -375,6 +391,7 @@ class CloudConfig {
   }
 
   async getConfig(configName) {
+    const Promise = this.Promise
     return new Promise((resolve, reject) => {
       if (isEmpty(configName)) {
         configName = this.defaultConfig
@@ -396,6 +413,7 @@ class CloudConfig {
   }
 
   async listConfigs() {
+    const Promise = this.Promise
     return new Promise((resolve, reject) => {
       const params = {
         auth: this.jwtClient,
@@ -411,63 +429,3 @@ class CloudConfig {
 }
 
 module.exports = CloudConfig
-
-process.env.GOOGLE_CLOUD_PROJECT = "squashed-melon"
-
-var config = new CloudConfig()
-config.loadCredentials('./runtime-configurator-credentials').then(() => {
-  // config.get("clientId", "google_auth_services").then((value) => {
-  //   console.log(value)
-  // })
-  console.log('list configs')
-  return config.listConfigs()
-}).then((value) => {
-  console.log(value)
-  console.log('get config')
-  return config.getConfig("google_auth_services")
-}).then((value) => {
-  console.log(value)
-  console.log('delete config')
-  return config.deleteConfig("google_auth_services")
-}).then((value) => {
-  console.log('create config')
-  return config.createConfig("google_auth_services")
-}).then(() => {
-  console.log('update config')
-  return config.updateConfig("google_auth_services", "here is a new description")
-}).then(() => {
-  console.log('create variable')
-  var buf = Buffer.from("here is a buffer");
-  return config.createVariableWithBuffer("new_buffer_variable", buf, "google_auth_services")
-}).then((value) => {
-  console.log(value)
-  return config.createVariableWithString("new_string_variable", "here is a string", "google_auth_services")
-}).then((value) => {
-  console.log(value)
-  return config.createVariableWithBool("new_bool_variable", true, "google_auth_services")
-}).then((value) => {
-  console.log(value)
-  console.log('list variables')
-  return config.listVariables("google_auth_services")
-}).then((value) => {
-  console.log(value)
-  return config.getVariable("new_string_variable", "google_auth_services")
-}).then((value) => {
-  console.log(value)
-  return config.updateVariableWithBool("new_bool_variable", false, "google_auth_services")
-}).then((value) => {
-  console.log(value)
-  return config.getVariable("new_bool_variable", "google_auth_services")
-}).then((value) => {
-  console.log(value)
-  return config.getVariable("new_buffer_variable", "google_auth_services")
-}).then((value) => {
-  console.log(value)
-  return config.deleteVariable("new_buffer_variable", "google_auth_services")
-})
-
-// justAGuy.name = 'martin' // The setter will be used automatically here.
-// justAGuy.sayHello() // Will output 'Hello, my name is Martin, I have ID: id_1'
-//
-//
-// module.exports =

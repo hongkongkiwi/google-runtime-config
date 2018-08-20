@@ -1,1 +1,4 @@
+.env
 runtime-configurator-credentials
+node_modules
+.DS_Store

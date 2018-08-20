@@ -1,4 +1,6 @@
-runtime-configurator-credentials
-node_modules
-.DS_Store
 .env
+runtime-configurator-credentials
+.DS_Store
+node_modules
+.npmignore
+.gitignore
