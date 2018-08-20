@@ -2,3 +2,4 @@ runtime-configurator-credentials
 node_modules
 .DS_Store
 .env
+.yo-rc.json
